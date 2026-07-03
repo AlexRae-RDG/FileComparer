@@ -1,0 +1,10 @@
+EmployeeID,Name,Department,Salary,Email
+1,Alice Johnson,Engineering,87000,alice@example.com
+2,Bob Smith,Marketing,62000,bob@example.com
+3,Carol Lee,Engineering,91000,carol.lee@example.com
+4,David Kim,Sales,58000,david@example.com
+5,eva green,hr,67000,eva@example.com
+6,Frank Moore,Engineering,72000,FRANK@example.com
+7,Grace Park,Marketing,64000,grace@example.com
+8,Henry Adams,Finance,70000,henry@example.com
+9,Ian Wright,Sales,59000,ian@example.com

@@ -1,0 +1,1697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spreadsheet Diff — Compare CSV & Excel Files</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* -------------------------------------------------------------------------
+   Design tokens — dark, modern developer-tool aesthetic
+   -----------------------------------------------------------------------
+   Near-black surfaces, an indigo→cyan accent gradient, and soft ambient
+   glow behind the header (a common "modern SaaS tool" signature). Data
+   values stay in monospace so the UI visually separates "your data" from
+   "the interface". Discrepancy types keep bright, unmistakable semantic
+   colors (red/amber/purple/green) that read clearly on a dark surface.
+------------------------------------------------------------------------- */
+:root {
+  --bg: #0B0D12;
+  --surface: #161A22;
+  --surface-2: #1C212B;
+  --border: #272C36;
+  --border-strong: #3A4150;
+
+  --ink: #F3F5F9;
+  --ink-soft: #A2A9B8;
+  --ink-faint: #6B7280;
+
+  --accent: #6366F1;
+  --accent-2: #22D3EE;
+  --accent-ink: #A5B4FC;
+  --accent-soft: rgba(99, 102, 241, 0.16);
+  --accent-gradient: linear-gradient(135deg, #6366F1 0%, #22D3EE 100%);
+
+  --good: #34D399;
+  --good-bg: rgba(52, 211, 153, 0.14);
+  --good-bg-strong: rgba(52, 211, 153, 0.26);
+
+  --bad: #F87171;
+  --bad-bg: rgba(248, 113, 113, 0.14);
+  --bad-bg-strong: rgba(248, 113, 113, 0.26);
+
+  --warn: #FBBF24;
+  --warn-bg: rgba(251, 191, 36, 0.14);
+  --warn-bg-strong: rgba(251, 191, 36, 0.26);
+
+  --dup: #C084FC;
+  --dup-bg: rgba(192, 132, 252, 0.14);
+  --dup-bg-strong: rgba(192, 132, 252, 0.26);
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --glow-accent: 0 0 0 1px rgba(99, 102, 241, 0.35), 0 8px 24px rgba(99, 102, 241, 0.25);
+
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input { font-family: inherit; }
+
+::selection { background: var(--accent); color: #fff; }
+
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* -------------------------------------------------------------------------
+   Ambient glow — the one bold signature element. Two soft color blobs
+   fixed behind the header, faded out well before the working area.
+------------------------------------------------------------------------- */
+.page {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 28px 100px;
+  z-index: 0;
+}
+
+.page::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  width: 900px;
+  height: 420px;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(circle at 25% 30%, rgba(99, 102, 241, 0.22), transparent 60%),
+    radial-gradient(circle at 75% 20%, rgba(34, 211, 238, 0.16), transparent 55%);
+  filter: blur(10px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* -------------------------------------------------------------------------
+   Topbar
+------------------------------------------------------------------------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  background: rgba(11, 13, 18, 0.75);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent-gradient);
+  color: #fff;
+  box-shadow: var(--glow-accent);
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.privacy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 11px 5px 9px;
+}
+.privacy-badge svg { color: var(--good); flex-shrink: 0; }
+
+@media (max-width: 560px) {
+  .privacy-badge span { display: none; }
+}
+
+/* -------------------------------------------------------------------------
+   Header
+------------------------------------------------------------------------- */
+.page__header { padding: 44px 0 34px; position: relative; }
+
+.page__header h1 {
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1.22;
+  font-weight: 600;
+  margin: 0 0 10px;
+  max-width: 640px;
+  letter-spacing: -0.015em;
+  background: linear-gradient(100deg, var(--ink) 40%, var(--accent-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.page__subtitle {
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 560px;
+  margin: 0;
+}
+
+/* -------------------------------------------------------------------------
+   Upload cards
+------------------------------------------------------------------------- */
+.upload-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 720px) {
+  .upload-grid { grid-template-columns: 1fr; }
+}
+
+.upload-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.upload-card:hover { transform: translateY(-1px); border-color: var(--border-strong); }
+.upload-card--filled { border-color: var(--border-strong); }
+.upload-card--error { border-color: var(--bad); }
+
+.upload-card__tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.upload-card__label {
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+
+.dropzone {
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  color: var(--ink-soft);
+}
+
+.dropzone:hover, .dropzone--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.dropzone__empty svg { margin-bottom: 6px; color: var(--ink-faint); }
+.dropzone__empty p { margin: 2px 0 10px; font-size: 14px; color: var(--ink-soft); }
+.dropzone__empty p strong { color: var(--ink); }
+
+.dropzone__formats {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.file-icon--csv { background: var(--accent-soft); color: var(--accent-ink); }
+.file-icon--xlsx { background: var(--good-bg); color: var(--good); }
+
+.dropzone__filled {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: default;
+  text-align: left;
+}
+
+.file-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-chip__name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-chip__meta {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.field-error {
+  color: var(--bad);
+  font-size: 13px;
+  margin: 10px 0 0;
+}
+
+/* -------------------------------------------------------------------------
+   Buttons
+------------------------------------------------------------------------- */
+.btn-primary {
+  background: var(--accent-gradient);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.1s ease, filter 0.15s ease;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover { box-shadow: var(--glow-accent); filter: brightness(1.06); }
+.btn-primary:active { transform: translateY(1px); }
+
+.btn-primary--lg { padding: 13px 28px; font-size: 15px; border-radius: var(--radius-md); }
+
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+}
+.btn-secondary:hover { border-color: var(--accent); background: var(--accent-soft); }
+.btn-secondary:disabled { opacity: 0.6; cursor: wait; }
+
+
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--accent-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.btn-text:hover { color: var(--accent-2); text-decoration: underline; }
+
+/* -------------------------------------------------------------------------
+   Config panel (key selector + options)
+------------------------------------------------------------------------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 30px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  animation: rise 0.2s ease;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.config-block { margin-bottom: 26px; }
+.config-block:last-of-type { margin-bottom: 0; }
+
+.config-block__heading h3 {
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+.config-block__heading p {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  margin: 0 0 14px;
+}
+
+.chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  transition: all 0.12s ease;
+}
+.chip:hover { border-color: var(--accent); color: var(--ink); }
+.chip input { accent-color: var(--accent); }
+.chip--selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.chip--muted.chip--selected {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.options-row { margin-top: 18px; }
+.options-row__title { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: var(--ink); }
+
+.switch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.switch-row input { margin-top: 3px; accent-color: var(--accent); }
+.switch-row__label {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ink);
+}
+.switch-row__hint { font-size: 12.5px; font-weight: 400; color: var(--ink-faint); }
+
+.panel__footer { margin-top: 26px; display: flex; }
+.panel__footer--left { justify-content: flex-start; margin-top: 20px; }
+
+/* -------------------------------------------------------------------------
+   Match status — the compact strip that replaces the old mandatory
+   "choose a key column" step. Shown once files are uploaded; tells the
+   person what matching strategy is in effect without asking them anything.
+------------------------------------------------------------------------- */
+.match-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 11px 18px;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.match-status__col {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.advanced-reset {
+  display: inline-block;
+  margin: -14px 0 20px;
+}
+
+/* -------------------------------------------------------------------------
+   Column notice — shown when the two files don't share every column
+------------------------------------------------------------------------- */
+.column-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: var(--radius-md);
+  padding: 11px 15px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 22px;
+}
+.column-notice svg { flex-shrink: 0; margin-top: 2px; }
+
+/* -------------------------------------------------------------------------
+   Options bar — compact, inline, non-blocking (no "apply" step; changes
+   here recompute the comparison live)
+------------------------------------------------------------------------- */
+.options-bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 4px 0 22px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.switch-row--inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.switch-row--inline input { accent-color: var(--accent); }
+.switch-row--inline .switch-row__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ignore-columns {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ignore-columns__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.summary-bar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 860px) {
+  .summary-bar { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 520px) {
+  .summary-bar { grid-template-columns: repeat(2, 1fr); }
+}
+
+.stat-card {
+  padding: 16px 16px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.stat-card:hover { transform: translateY(-2px); }
+
+.stat-card__value {
+  font-family: var(--font-mono);
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
+.stat-card__label {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin-top: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.stat-card--success { border-color: rgba(52, 211, 153, 0.3); }
+.stat-card--success .stat-card__value { color: var(--good); }
+.stat-card--warn { border-color: rgba(251, 191, 36, 0.3); }
+.stat-card--warn .stat-card__value { color: var(--warn); }
+.stat-card--danger { border-color: rgba(248, 113, 113, 0.3); }
+.stat-card--danger .stat-card__value { color: var(--bad); }
+.stat-card--purple { border-color: rgba(192, 132, 252, 0.3); }
+.stat-card--purple .stat-card__value { color: var(--dup); }
+
+/* -------------------------------------------------------------------------
+   Results: toolbar, tabs, search, table
+------------------------------------------------------------------------- */
+.results__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.tab {
+  background: none;
+  border: none;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tab:hover { color: var(--ink); }
+.tab--active { background: var(--accent-gradient); color: #fff; }
+.tab__count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.tab--active .tab__count { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+.results__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  background: var(--surface-2);
+  color: var(--ink-faint);
+  transition: border-color 0.15s ease;
+}
+.search-box:focus-within { border-color: var(--accent); }
+.search-box input {
+  border: none;
+  outline: none;
+  font-size: 13.5px;
+  width: 190px;
+  color: var(--ink);
+  background: transparent;
+}
+
+/* Spreadsheet-grid results table: hairlines in both directions, a
+   shaded frozen key column, sticky header. */
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  max-height: 560px;
+  box-shadow: var(--shadow-sm);
+  background: var(--surface);
+}
+
+.diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.diff-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  text-align: left;
+  padding: 11px 14px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--border-strong);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+.diff-table thead th:last-child { border-right: none; }
+
+.diff-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--ink);
+}
+.diff-table tbody td:last-child { border-right: none; }
+
+.diff-table tbody td:first-child,
+.diff-table thead th:first-child {
+  background: var(--surface-2);
+  border-right: 1.5px solid var(--border-strong);
+  font-weight: 600;
+}
+
+.diff-table tbody tr:hover td { background: #1D222C; }
+.diff-table tbody tr:hover td:first-child { background: #232935; }
+
+.mono { font-family: var(--font-mono); font-size: 12.5px; }
+
+.empty-cell {
+  text-align: center;
+  color: var(--ink-faint);
+  padding: 44px 14px !important;
+  background: var(--surface) !important;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.badge--danger { background: var(--bad-bg-strong); color: var(--bad); }
+.badge--warn { background: var(--warn-bg-strong); color: var(--warn); }
+.badge--purple { background: var(--dup-bg-strong); color: var(--dup); }
+
+/* Git-diff-style before/after highlighting for mismatched values */
+.diff-cell--a { background: var(--bad-bg); color: var(--bad); border-radius: 4px; }
+.diff-cell--b { background: var(--good-bg); color: var(--good); border-radius: 4px; }
+
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<!-- Third-party libraries (all client-side, no build step required for
+     the app itself - this script is only for stitching OUR OWN files
+     together during development). -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+
+<!-- App code: inlined directly (not loaded via local src=) so the page
+     works as a single, fully self-contained file - even if it's moved,
+     previewed, or opened on its own without the rest of the project
+     folder alongside it. Generated by build.py - do not hand-edit the
+     script/style blocks below; edit styles.css / js/**/*.js instead. -->
+<script>
+/**
+ * parsers.js
+ * -----------------------------------------------------------------------
+ * Turns an uploaded File (CSV or XLSX) into a plain structure:
+ *   { fileName, headers: string[], rows: object[] }
+ *
+ * Uses PapaParse for CSV and SheetJS (xlsx) for Excel. Both libraries are
+ * loaded from a CDN in index.html and are available as globals
+ * (Papa, XLSX).
+ * -----------------------------------------------------------------------
+ */
+
+/** Reads a File as an ArrayBuffer (needed by SheetJS). */
+function readAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read the file.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/** Reads a File as text (needed by PapaParse). */
+function readAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read the file.'));
+    reader.readAsText(file);
+  });
+}
+
+/** Validates a header row: must exist and contain no blank/duplicate column names. */
+function validateHeaders(headers, fileLabel) {
+  if (!headers || headers.length === 0) {
+    throw new Error(`${fileLabel}: no header row was found. The first row of the file must contain column names.`);
+  }
+  const blankIndex = headers.findIndex((h) => String(h).trim() === '');
+  if (blankIndex !== -1) {
+    throw new Error(`${fileLabel}: column ${blankIndex + 1} has a blank header. Every column needs a name.`);
+  }
+  const seen = new Set();
+  headers.forEach((h) => {
+    const key = h.trim();
+    if (seen.has(key)) {
+      throw new Error(`${fileLabel}: the header "${h}" appears more than once. Column names must be unique.`);
+    }
+    seen.add(key);
+  });
+}
+
+/** Parses a CSV file using PapaParse. */
+async function parseCSVFile(file) {
+  const text = await readAsText(file);
+  const result = Papa.parse(text, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    transformHeader: (h) => h.trim(),
+  });
+
+  if (result.errors && result.errors.length > 0) {
+    const fatal = result.errors.find((e) => e.type !== 'FieldMismatch');
+    if (fatal) {
+      throw new Error(`${file.name}: could not parse this CSV (${fatal.message}).`);
+    }
+  }
+
+  const headers = result.meta.fields || [];
+  validateHeaders(headers, file.name);
+
+  return { fileName: file.name, headers, rows: result.data };
+}
+
+/** Parses an XLSX (or XLS) file using SheetJS, reading the first sheet. */
+async function parseXLSXFile(file) {
+  const buffer = await readAsArrayBuffer(file);
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) {
+    throw new Error(`${file.name}: this workbook has no sheets.`);
+  }
+  const sheet = workbook.Sheets[sheetName];
+
+  // Grab the raw first row separately so headers can be validated precisely.
+  const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+  const headers = (rawRows[0] || []).map((h) => (h === undefined ? '' : String(h).trim()));
+  validateHeaders(headers, file.name);
+
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  return { fileName: file.name, headers, rows };
+}
+
+/** Entry point: dispatches to the right parser based on file extension. */
+async function parseSpreadsheetFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.csv')) {
+    return parseCSVFile(file);
+  }
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    return parseXLSXFile(file);
+  }
+  throw new Error(`${file.name}: unsupported file type. Please upload a .csv or .xlsx file.`);
+}
+
+</script>
+
+<script>
+/**
+ * compareEngine.js
+ * -----------------------------------------------------------------------
+ * Pure functions that compare two parsed datasets and produce a flat list
+ * of discrepancy records plus a summary. No DOM/React code lives here so
+ * it can be tested or reused independently of the UI.
+ *
+ * Matching strategy: rows are compared by POSITION (row 1 vs row 1, row 2
+ * vs row 2, ...). This needs no configuration, which is the point - but
+ * it means results are most meaningful when both files list rows in the
+ * same order. If a row is inserted or removed in the middle of one file,
+ * every row after that point will look mismatched, since it's now lined
+ * up against the wrong row on the other side.
+ * -----------------------------------------------------------------------
+ */
+
+const DISCREPANCY_TYPES = {
+  MISSING_IN_A: 'Missing in A',
+  MISSING_IN_B: 'Missing in B',
+  VALUE_MISMATCH: 'Value Mismatch',
+};
+
+/** Treats null/undefined/blank consistently and trims whitespace. */
+function cleanValue(value) {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+/** Normalizes a value for comparison purposes (case folding, blank handling). */
+function normalizeForCompare(value, caseSensitive) {
+  const cleaned = cleanValue(value);
+  return caseSensitive ? cleaned : cleaned.toLowerCase();
+}
+
+/**
+ * Compares two datasets and returns { discrepancies, columnNotice, summary }.
+ *
+ * @param {object} params
+ * @param {object[]} params.rowsA
+ * @param {object[]} params.rowsB
+ * @param {string[]} params.headersA
+ * @param {string[]} params.headersB
+ * @param {string[]} params.ignoredColumns - columns excluded from comparison
+ * @param {boolean}  params.caseSensitive
+ */
+function compareDatasets({ rowsA, rowsB, headersA, headersB, ignoredColumns, caseSensitive }) {
+  const ignoredSet = new Set(ignoredColumns);
+  const commonColumns = headersA.filter((h) => headersB.includes(h) && !ignoredSet.has(h));
+  const onlyInA = headersA.filter((h) => !headersB.includes(h));
+  const onlyInB = headersB.filter((h) => !headersA.includes(h));
+
+  const discrepancies = [];
+
+  // Row-by-row (positional) comparison.
+  const maxLen = Math.max(rowsA.length, rowsB.length);
+  let matched = 0;
+  const mismatchedRowLabels = new Set();
+  let missing = 0;
+
+  for (let i = 0; i < maxLen; i += 1) {
+    const rowA = rowsA[i];
+    const rowB = rowsB[i];
+    const label = `Row ${i + 1}`;
+
+    if (rowA && !rowB) {
+      missing += 1;
+      discrepancies.push({
+        key: label,
+        discrepancyType: DISCREPANCY_TYPES.MISSING_IN_B,
+        columnName: '(entire row)',
+        valueA: 'Row present',
+        valueB: '',
+      });
+      continue;
+    }
+    if (!rowA && rowB) {
+      missing += 1;
+      discrepancies.push({
+        key: label,
+        discrepancyType: DISCREPANCY_TYPES.MISSING_IN_A,
+        columnName: '(entire row)',
+        valueA: '',
+        valueB: 'Row present',
+      });
+      continue;
+    }
+
+    let rowHasMismatch = false;
+    commonColumns.forEach((col) => {
+      const rawA = cleanValue(rowA[col]);
+      const rawB = cleanValue(rowB[col]);
+      if (normalizeForCompare(rawA, caseSensitive) !== normalizeForCompare(rawB, caseSensitive)) {
+        rowHasMismatch = true;
+        discrepancies.push({
+          key: label,
+          discrepancyType: DISCREPANCY_TYPES.VALUE_MISMATCH,
+          columnName: col,
+          valueA: rawA,
+          valueB: rawB,
+        });
+      }
+    });
+
+    if (rowHasMismatch) {
+      mismatchedRowLabels.add(label);
+    } else {
+      matched += 1;
+    }
+  }
+
+  // Sort by row number so results read top-to-bottom in the same order
+  // as the source files, making it easy to scan for what's missing or
+  // different without hunting through the list.
+  discrepancies.sort((a, b) => {
+    const rowNumber = (label) => parseInt(String(label).replace(/[^0-9]/g, ''), 10) || 0;
+    return rowNumber(a.key) - rowNumber(b.key);
+  });
+
+  return {
+    discrepancies,
+    commonColumns,
+    columnNotice: { onlyInA, onlyInB },
+    summary: {
+      totalA: rowsA.length,
+      totalB: rowsB.length,
+      matched,
+      mismatched: mismatchedRowLabels.size,
+      missing,
+    },
+  };
+}
+
+</script>
+
+<script>
+/**
+ * exportCsv.js
+ * -----------------------------------------------------------------------
+ * Converts a list of discrepancy records into a downloadable CSV file.
+ * -----------------------------------------------------------------------
+ */
+
+/** Escapes a single CSV field per RFC 4180. */
+function escapeCsvField(value) {
+  const str = value === null || value === undefined ? '' : String(value);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/** Builds a CSV string from the discrepancy rows. */
+function buildDiscrepancyCsv(rows) {
+  const headers = ['Key', 'Discrepancy Type', 'Column Name', 'Source A Value', 'Source B Value'];
+  const lines = [headers.map(escapeCsvField).join(',')];
+  rows.forEach((r) => {
+    lines.push(
+      [r.key, r.discrepancyType, r.columnName, r.valueA, r.valueB].map(escapeCsvField).join(',')
+    );
+  });
+  return lines.join('\n');
+}
+
+/** Triggers a browser download of the discrepancy report as a CSV file. */
+function downloadDiscrepancyReport(rows, fileName = 'discrepancy-report.csv') {
+  const csv = buildDiscrepancyCsv(rows);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+</script>
+
+<script>
+/**
+ * exportExcel.js
+ * -----------------------------------------------------------------------
+ * Builds a single-sheet Excel workbook that lists Source A and Source B
+ * side by side, column by column, with:
+ *   - rows missing from one side filled solid orange
+ *   - mismatched cell pairs filled light amber
+ *
+ * Uses ExcelJS rather than SheetJS for this, since SheetJS's free/
+ * community build can only write plain data - it can't write cell fills.
+ * ExcelJS is loaded from a CDN in index.html as the global `ExcelJS`.
+ * -----------------------------------------------------------------------
+ */
+
+const EXCEL_FILL_MISSING = 'FFF6A400'; // solid orange - entire row missing from one side
+const EXCEL_FILL_MISMATCH = 'FFFFE8A3'; // light amber - a specific mismatched cell pair
+const EXCEL_FILL_HEADER = 'FF1F2430'; // dark header band
+
+/** Groups discrepancies by row number for quick lookup while building the sheet. */
+function indexDiscrepanciesByRow(discrepancies) {
+  const missingRows = new Set();
+  const mismatchColumnsByRow = new Map();
+
+  discrepancies.forEach((d) => {
+    const rowNumber = parseInt(String(d.key).replace(/[^0-9]/g, ''), 10);
+    if (Number.isNaN(rowNumber)) return;
+
+    if (d.discrepancyType === 'Missing in A' || d.discrepancyType === 'Missing in B') {
+      missingRows.add(rowNumber);
+    } else if (d.discrepancyType === 'Value Mismatch') {
+      if (!mismatchColumnsByRow.has(rowNumber)) mismatchColumnsByRow.set(rowNumber, new Set());
+      mismatchColumnsByRow.get(rowNumber).add(d.columnName);
+    }
+  });
+
+  return { missingRows, mismatchColumnsByRow };
+}
+
+/**
+ * Builds and downloads the side-by-side Excel report.
+ *
+ * @param {object} params
+ * @param {object}   params.fileA        - parsed Source A ({ rows, fileName })
+ * @param {object}   params.fileB        - parsed Source B ({ rows, fileName })
+ * @param {string[]} params.commonColumns - the columns actually compared (in order)
+ * @param {object[]} params.discrepancies - the full (unfiltered) discrepancy list
+ * @param {string}   [params.fileName]
+ */
+async function downloadComparisonExcel({ fileA, fileB, commonColumns, discrepancies, fileName = 'comparison-side-by-side.xlsx' }) {
+  const { missingRows, mismatchColumnsByRow } = indexDiscrepanciesByRow(discrepancies);
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Comparison');
+
+  // Header: "Row" then, for each compared column, an A/B pair.
+  const headerCells = ['Row'];
+  commonColumns.forEach((col) => {
+    headerCells.push(`${col} (Source A)`, `${col} (Source B)`);
+  });
+  const headerRow = sheet.addRow(headerCells);
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_FILL_HEADER } };
+    cell.alignment = { vertical: 'middle' };
+  });
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  const maxLen = Math.max(fileA.rows.length, fileB.rows.length);
+
+  for (let i = 0; i < maxLen; i += 1) {
+    const rowA = fileA.rows[i];
+    const rowB = fileB.rows[i];
+    const rowNumber = i + 1;
+
+    const values = [rowNumber];
+    commonColumns.forEach((col) => {
+      values.push(rowA ? cleanValue(rowA[col]) : '');
+      values.push(rowB ? cleanValue(rowB[col]) : '');
+    });
+
+    const excelRow = sheet.addRow(values);
+
+    if (missingRows.has(rowNumber)) {
+      excelRow.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_FILL_MISSING } };
+      });
+    } else {
+      const mismatchedCols = mismatchColumnsByRow.get(rowNumber);
+      if (mismatchedCols) {
+        commonColumns.forEach((col, idx) => {
+          if (!mismatchedCols.has(col)) return;
+          const colOffset = 2 + idx * 2; // 1-based: col 1 is "Row"
+          [colOffset, colOffset + 1].forEach((colNum) => {
+            excelRow.getCell(colNum).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_FILL_MISMATCH } };
+          });
+        });
+      }
+    }
+  }
+
+  // Light borders + sensible column widths for readability.
+  sheet.getColumn(1).width = 8;
+  for (let c = 2; c <= headerCells.length; c += 1) {
+    sheet.getColumn(c).width = 22;
+  }
+  sheet.eachRow((row) => {
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+        bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+        left: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+        right: { style: 'thin', color: { argb: 'FFDDDDDD' } },
+      };
+    });
+  });
+
+  // A short legend a couple of rows below the data so the colors are self-explanatory.
+  const legendStartRow = sheet.rowCount + 2;
+  const legendMissing = sheet.getRow(legendStartRow);
+  legendMissing.getCell(1).value = 'Orange = row missing from one side';
+  legendMissing.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_FILL_MISSING } };
+  const legendMismatch = sheet.getRow(legendStartRow + 1);
+  legendMismatch.getCell(1).value = 'Amber = mismatched value';
+  legendMismatch.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: EXCEL_FILL_MISMATCH } };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+</script>
+
+<script type="text/babel">
+/**
+ * FileUploadCard
+ * A drag-and-drop / click-to-browse card for one source file.
+ */
+function getFileKind(fileName) {
+  const ext = fileName.toLowerCase().split('.').pop();
+  if (ext === 'xlsx' || ext === 'xls') return { label: 'XLS', kindClass: 'file-icon--xlsx' };
+  return { label: 'CSV', kindClass: 'file-icon--csv' };
+}
+
+function FileUploadCard({ label, sourceTag, file, error, onFileSelected, onClear }) {
+  const inputRef = React.useRef(null);
+  const [isDragOver, setIsDragOver] = React.useState(false);
+
+  const handleFiles = (fileList) => {
+    const picked = fileList && fileList[0];
+    if (picked) onFileSelected(picked);
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    handleFiles(e.dataTransfer.files);
+  };
+
+  return (
+    <div className={`upload-card ${file ? 'upload-card--filled' : ''} ${error ? 'upload-card--error' : ''}`}>
+      <div className="upload-card__tag">{sourceTag}</div>
+      <h3 className="upload-card__label">{label}</h3>
+
+      <div
+        className={`dropzone ${isDragOver ? 'dropzone--active' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={onDrop}
+        onClick={() => inputRef.current && inputRef.current.click()}
+        role="button"
+        tabIndex={0}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv,.xlsx,.xls"
+          hidden
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+
+        {!file && (
+          <div className="dropzone__empty">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <path d="M12 3v12m0-12 4 4m-4-4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <p><strong>Drop file</strong> or click to browse</p>
+            <div className="dropzone__formats">
+              <span className="file-icon file-icon--csv">CSV</span>
+              <span className="file-icon file-icon--xlsx">XLS</span>
+            </div>
+          </div>
+        )}
+
+        {file && (
+          <div className="dropzone__filled" onClick={(e) => e.stopPropagation()}>
+            <span className={`file-icon ${getFileKind(file.fileName).kindClass}`}>
+              {getFileKind(file.fileName).label}
+            </span>
+            <div className="file-chip">
+              <span className="file-chip__name">{file.fileName}</span>
+              <span className="file-chip__meta">
+                {file.rows.length} rows · {file.headers.length} columns
+              </span>
+            </div>
+            <button type="button" className="btn-text" onClick={onClear}>
+              Replace file
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && <p className="field-error">{error}</p>}
+    </div>
+  );
+}
+
+</script>
+
+<script type="text/babel">
+/**
+ * OptionsPanel
+ * Lightweight, non-blocking options: case sensitivity and columns to
+ * ignore. These live-update the comparison as soon as they change -
+ * there's no separate "apply" step.
+ */
+function OptionsPanel({ ignorableHeaders, ignoredColumns, setIgnoredColumns, caseSensitive, setCaseSensitive }) {
+  const toggleIgnored = (col) => {
+    setIgnoredColumns((prev) =>
+      prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
+    );
+  };
+
+  return (
+    <div className="options-bar">
+      <label className="switch-row switch-row--inline">
+        <input
+          type="checkbox"
+          checked={caseSensitive}
+          onChange={(e) => setCaseSensitive(e.target.checked)}
+        />
+        <span className="switch-row__label">Case-sensitive</span>
+      </label>
+
+      {ignorableHeaders.length > 0 && (
+        <div className="ignore-columns">
+          <span className="ignore-columns__label">Ignore:</span>
+          <div className="chip-grid">
+            {ignorableHeaders.map((col) => (
+              <label key={col} className={`chip chip--muted ${ignoredColumns.includes(col) ? 'chip--selected' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={ignoredColumns.includes(col)}
+                  onChange={() => toggleIgnored(col)}
+                />
+                {col}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+</script>
+
+<script type="text/babel">
+/**
+ * SummaryBar
+ * Six at-a-glance stats about the comparison that just ran.
+ */
+function SummaryBar({ summary }) {
+  const stats = [
+    { label: 'Rows in Source A', value: summary.totalA, tone: 'neutral' },
+    { label: 'Rows in Source B', value: summary.totalB, tone: 'neutral' },
+    { label: 'Matched rows', value: summary.matched, tone: 'success' },
+    { label: 'Mismatched rows', value: summary.mismatched, tone: 'warn' },
+    { label: 'Missing rows', value: summary.missing, tone: 'danger' },
+  ];
+
+  return (
+    <div className="summary-bar">
+      {stats.map((s) => (
+        <div key={s.label} className={`stat-card stat-card--${s.tone}`}>
+          <div className="stat-card__value">{s.value}</div>
+          <div className="stat-card__label">{s.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+</script>
+
+<script type="text/babel">
+/**
+ * ResultsTable
+ * Filterable, searchable table of discrepancy records, with CSV and
+ * Excel exports.
+ */
+const FILTER_TABS = [
+  { id: 'all', label: 'All' },
+  { id: 'missing', label: 'Missing rows' },
+  { id: 'mismatch', label: 'Mismatched values' },
+];
+
+const TYPE_GROUP = {
+  'Missing in A': 'missing',
+  'Missing in B': 'missing',
+  'Value Mismatch': 'mismatch',
+};
+
+const TYPE_BADGE_CLASS = {
+  'Missing in A': 'badge badge--danger',
+  'Missing in B': 'badge badge--danger',
+  'Value Mismatch': 'badge badge--warn',
+};
+
+function ResultsTable({ discrepancies, filter, setFilter, search, setSearch, onExportCsv, onExportExcel, excelExporting }) {
+  const counts = React.useMemo(() => {
+    const c = { all: discrepancies.length, missing: 0, mismatch: 0 };
+    discrepancies.forEach((d) => {
+      const g = TYPE_GROUP[d.discrepancyType];
+      if (g) c[g] += 1;
+    });
+    return c;
+  }, [discrepancies]);
+
+  const filtered = React.useMemo(() => {
+    let rows = discrepancies;
+    if (filter !== 'all') {
+      rows = rows.filter((d) => TYPE_GROUP[d.discrepancyType] === filter);
+    }
+    if (search.trim() !== '') {
+      const q = search.trim().toLowerCase();
+      rows = rows.filter(
+        (d) =>
+          String(d.key).toLowerCase().includes(q) ||
+          String(d.columnName).toLowerCase().includes(q) ||
+          String(d.valueA).toLowerCase().includes(q) ||
+          String(d.valueB).toLowerCase().includes(q)
+      );
+    }
+    return rows;
+  }, [discrepancies, filter, search]);
+
+  return (
+    <div className="results">
+      <div className="results__toolbar">
+        <div className="tabs" role="tablist">
+          {FILTER_TABS.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              className={`tab ${filter === t.id ? 'tab--active' : ''}`}
+              onClick={() => setFilter(t.id)}
+            >
+              {t.label} <span className="tab__count">{counts[t.id]}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="results__actions">
+          <div className="search-box">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by row or value…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <button type="button" className="btn-secondary" onClick={onExportExcel} disabled={excelExporting}>
+            {excelExporting ? 'Building…' : 'Export Excel (side by side)'}
+          </button>
+          <button type="button" className="btn-primary" onClick={() => onExportCsv(filtered)}>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div className="table-wrap">
+        <table className="diff-table">
+          <thead>
+            <tr>
+              <th>Row</th>
+              <th>Discrepancy Type</th>
+              <th>Column Name</th>
+              <th>Source A Value</th>
+              <th>Source B Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan="5" className="empty-cell">
+                  No discrepancies match the current filter and search.
+                </td>
+              </tr>
+            )}
+            {filtered.map((d, i) => {
+              const isMismatch = d.discrepancyType === 'Value Mismatch';
+              return (
+                <tr key={i}>
+                  <td className="mono">{d.key}</td>
+                  <td>
+                    <span className={TYPE_BADGE_CLASS[d.discrepancyType] || 'badge'}>
+                      {d.discrepancyType}
+                    </span>
+                  </td>
+                  <td className="mono">{d.columnName}</td>
+                  <td className={`mono ${isMismatch ? 'diff-cell diff-cell--a' : ''}`}>{d.valueA || '—'}</td>
+                  <td className={`mono ${isMismatch ? 'diff-cell diff-cell--b' : ''}`}>{d.valueB || '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+</script>
+
+<script type="text/babel">
+/**
+ * App
+ * Top-level component. Flow: upload two files -> comparison runs
+ * automatically by row position -> results update live as options change.
+ * There is no key-column setup step - see compareEngine.js for the
+ * matching strategy and its tradeoffs.
+ */
+function App() {
+  const [fileA, setFileA] = React.useState(null);
+  const [fileB, setFileB] = React.useState(null);
+  const [errorA, setErrorA] = React.useState(null);
+  const [errorB, setErrorB] = React.useState(null);
+
+  const [ignoredColumns, setIgnoredColumns] = React.useState([]);
+  const [caseSensitive, setCaseSensitive] = React.useState(false);
+
+  const [filter, setFilter] = React.useState('all');
+  const [search, setSearch] = React.useState('');
+  const [excelExporting, setExcelExporting] = React.useState(false);
+
+  const bothFilesReady = Boolean(fileA && fileB && !errorA && !errorB);
+
+  const commonHeaders = React.useMemo(() => {
+    if (!bothFilesReady) return [];
+    return fileA.headers.filter((h) => fileB.headers.includes(h));
+  }, [fileA, fileB, bothFilesReady]);
+
+  // Comparison recomputes automatically whenever the files or options
+  // change - there's no separate "Compare" step.
+  const result = React.useMemo(() => {
+    if (!bothFilesReady) return null;
+    return compareDatasets({
+      rowsA: fileA.rows,
+      rowsB: fileB.rows,
+      headersA: fileA.headers,
+      headersB: fileB.headers,
+      ignoredColumns,
+      caseSensitive,
+    });
+  }, [fileA, fileB, bothFilesReady, ignoredColumns, caseSensitive]);
+
+  async function handleFileSelected(source, file) {
+    const setFile = source === 'A' ? setFileA : setFileB;
+    const setError = source === 'A' ? setErrorA : setErrorB;
+    setError(null);
+    setFile(null);
+    try {
+      const parsed = await parseSpreadsheetFile(file);
+      setFile(parsed);
+    } catch (err) {
+      setError(err.message || 'Could not read this file.');
+    }
+  }
+
+  function handleClear(source) {
+    if (source === 'A') { setFileA(null); setErrorA(null); }
+    else { setFileB(null); setErrorB(null); }
+  }
+
+  function handleStartOver() {
+    setFileA(null);
+    setFileB(null);
+    setErrorA(null);
+    setErrorB(null);
+    setIgnoredColumns([]);
+    setCaseSensitive(false);
+    setFilter('all');
+    setSearch('');
+  }
+
+  async function handleExportExcel() {
+    if (!result) return;
+    setExcelExporting(true);
+    try {
+      await downloadComparisonExcel({
+        fileA,
+        fileB,
+        commonColumns: result.commonColumns,
+        discrepancies: result.discrepancies,
+      });
+    } catch (err) {
+      window.alert(`Could not build the Excel report: ${err.message || err}`);
+    } finally {
+      setExcelExporting(false);
+    }
+  }
+
+  return (
+    <div className="page">
+      <div className="topbar">
+        <div className="topbar__brand">
+          <span className="brand-mark" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </span>
+          <span className="brand-name">Spreadsheet Diff</span>
+        </div>
+        <span className="privacy-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="5" y="11" width="14" height="9" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          Runs entirely in your browser
+        </span>
+      </div>
+
+      <header className="page__header">
+        <h1>Compare two spreadsheets, spot every discrepancy</h1>
+        <p className="page__subtitle">
+          Upload a CSV or Excel file for each source. Rows and columns are compared
+          automatically, row by row — no setup required.
+        </p>
+      </header>
+
+      <section className="upload-grid">
+        <FileUploadCard
+          label="Source A"
+          sourceTag="A"
+          file={fileA}
+          error={errorA}
+          onFileSelected={(f) => handleFileSelected('A', f)}
+          onClear={() => handleClear('A')}
+        />
+        <FileUploadCard
+          label="Source B"
+          sourceTag="B"
+          file={fileB}
+          error={errorB}
+          onFileSelected={(f) => handleFileSelected('B', f)}
+          onClear={() => handleClear('B')}
+        />
+      </section>
+
+      {result && (
+        <section className="panel">
+          {(result.columnNotice.onlyInA.length > 0 || result.columnNotice.onlyInB.length > 0) && (
+            <div className="column-notice">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              </svg>
+              <span>
+                {result.columnNotice.onlyInA.length > 0 && (
+                  <>Columns only in Source A ({result.columnNotice.onlyInA.join(', ')}) </>
+                )}
+                {result.columnNotice.onlyInB.length > 0 && (
+                  <>Columns only in Source B ({result.columnNotice.onlyInB.join(', ')}) </>
+                )}
+                were excluded from the comparison.
+              </span>
+            </div>
+          )}
+
+          <SummaryBar summary={result.summary} />
+
+          <OptionsPanel
+            ignorableHeaders={commonHeaders}
+            ignoredColumns={ignoredColumns}
+            setIgnoredColumns={setIgnoredColumns}
+            caseSensitive={caseSensitive}
+            setCaseSensitive={setCaseSensitive}
+          />
+
+          <ResultsTable
+            discrepancies={result.discrepancies}
+            filter={filter}
+            setFilter={setFilter}
+            search={search}
+            setSearch={setSearch}
+            onExportCsv={(rows) => downloadDiscrepancyReport(rows)}
+            onExportExcel={handleExportExcel}
+            excelExporting={excelExporting}
+          />
+
+          <div className="panel__footer panel__footer--left">
+            <button type="button" className="btn-text" onClick={handleStartOver}>
+              ← Start a new comparison
+            </button>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+
+</script>
+
+</body>
+</html>
